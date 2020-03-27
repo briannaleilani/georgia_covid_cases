@@ -1,7 +1,4 @@
 pandas
-bumpy
+numpy
 geopandas
-datetime
-json
-math
 bokeh
