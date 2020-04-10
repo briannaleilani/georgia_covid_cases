@@ -32,7 +32,7 @@ gdf['fips'] = gdf['fips'].astype(int)
 
 # ## Import Dataframes
 # summary = pd.read_csv('https://raw.githubusercontent.com/briannaleilani/ga_covid_dash/master/georgia.csv')
-counties = pd.read_csv('https://raw.githubusercontent.com/briannaleilani/ga_covid_dash/master/data/ga_90days.csv')
+counties = pd.read_csv('ga_90days_map.csv')
 
 # Get the most recent day
 date_day = pd.read_csv('/Users/brileilani/Desktop/Coronavirus/date_dict.csv')
