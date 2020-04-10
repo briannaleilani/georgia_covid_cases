@@ -1,18 +1,12 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# # Import Modules and Data
-
-# In[3]:
-
-
 import pandas as pd
 import numpy as np
 import geopandas as gpd
 import datetime as dt
 import json
 import math
-
 from bokeh.io import output_notebook, show, output_file
 from bokeh.plotting import figure
 from bokeh.models import GeoJSONDataSource, LinearColorMapper, ColorBar, NumeralTickFormatter
@@ -21,7 +15,11 @@ from bokeh.io.doc import curdoc
 from bokeh.models import Slider, HoverTool, Select
 from bokeh.layouts import widgetbox, row, column
 
+pd.set_option('max_columns', 180)
+pd.set_option('max_rows', 200000)
+pd.set_option('max_colwidth', 5000)
 
+# ## Geopandas
 shapefile = 'ga_data/county_shp/Counties_Georgia.shp'
 
 #Read shapefile using Geopandas
@@ -31,33 +29,32 @@ gdf.iloc[0]
 #Rename columns.
 gdf.columns = ['fips', 'county_code', 'geometry']
 gdf['fips'] = gdf['fips'].astype(int)
-gdf.head(1)
-
 
 # ## Import Dataframes
-# add day count starting from 19 on 22nd
-summary = pd.read_csv('ga_data/output/ga_cases_summary.csv')
-counties = pd.read_csv('ga_data/output/ga_county_cases.csv')
+# summary = pd.read_csv('https://raw.githubusercontent.com/briannaleilani/ga_covid_dash/master/georgia.csv')
+counties = pd.read_csv('https://raw.githubusercontent.com/briannaleilani/ga_covid_dash/master/data/ga_90days.csv')
 
-# clean data for visualization
-counties.fillna(0, inplace=True)
-most_recent = counties["Day"].max()
+# Get the most recent day
+date_day = pd.read_csv('/Users/brileilani/Desktop/Coronavirus/date_dict.csv')
+date = pd.to_datetime(date_day["Date"], dayfirst=True)
+date_s = date.dt.strftime('%m/%d/%Y').tolist()
+day_dict = dict(zip(date_s, range(1,len(date_s)+1))) # DATES AS KEYS
 
+today = pd.Timestamp.today().strftime("%m/%d/%Y")
+most_recent = day_dict[today] 
 
 # ## Create a Formatting DataFrame
-# This will be used to adjust the ColorBar values. Each criteria has it’s own unique minimum and maximum range, format for displaying and verbage. 
-
 # This dictionary contains the formatting for the data in the plots
-format_data = [('Confirmed', 1, 100,'0,0', 'Number of Confirmed Coronavirus Cases'),
-               ('Deaths', 1, 10,'0,0', 'Number of Confirmed Coronavirus Deaths'),
-               ('Fatality_Rate', 0.01, 100, '0.00', 'Coronavirus Fatality Rate (Deaths/Confirmed)'),
-               ('pConfirmed_Change', 0.01, 100,'0.00', 'Percent Daily Change in Coronavirus Cases')
+format_data = [('TotalCases', 1, 100,'0,0', 'Number of Confirmed Coronavirus Cases'),
+               ('TotalDeaths', 1, 10,'0,0', 'Number of Confirmed Coronavirus Deaths'),
+               ('nConfirmed_Change', 1, 100, '0,0', 'Daily Increase in Cases'),
+               ('nDeaths_Change', 1, 15,'0,0', 'Daily Increase in Deaths')
               ]
  
 # Create a DataFrame object from the dictionary 
 format_df = pd.DataFrame(format_data, columns = ['field' , 'min_range', 'max_range' , 'format', 'verbage'])
 
-# ## Create the JSON Data for the GeoJSONDataSource
+
 # Define function that returns json_data for the day since the coronavirus outbreak started in Georgia, defined by user
 def json_data(selected_day):
     day = selected_day
@@ -69,20 +66,16 @@ def json_data(selected_day):
     merged = gdf.merge(df_day, on='fips') 
     
     # Fill the null values
-    values = {'Day': day, 'Confirmed': 0, 'Deaths': 0, 'Recovered': 0, 'Active': 0, 'Fatality_Rate': 0, 
-              'nConfirmed_Change': 0, 'nDeaths_Change': 0, 'nRecovered_Change': 0, 
-              'pConfirmed_Change': 0, 'pDeaths_Change': 0, 'pRecovered_Change': 0}
+    values = {'Date': 0, 'Day': day, 'Population': 0, 'TotalCases': 0, 'TotalDeaths': 0, 'PctPopInfected': 0, 
+              'Infection_per_100k': 0, 'Deaths_per_100k': 0, 'Deaths_per_100_Infections': 0, 
+              'nConfirmed_Change': 0, 'nDeaths_Change': 0, 'pConfirmed_Change': 0, 'pDeaths_Change': 0, 'Fatality_Rate': 0}
     merged = merged.fillna(value=values)
-    
-    # Convert datetime object to string as json object doesn't except datetime values
-    merged['Date'] = str(merged['Date'])
     
     # Convert to json
     json_data = merged.to_json()
     return json_data
 
 # # Interactive Map
-# ## Define the callback function: update_plot
 def update_plot(attr, old, new):
     # The input `day` is the day selected from the slider
     day = slider.value
@@ -102,6 +95,7 @@ def update_plot(attr, old, new):
     
     # Update the data
     geosource.geojson = new_data
+
 
 # ## Define the plotting function: make_plot
 def make_plot(field_name):
@@ -137,10 +131,11 @@ def make_plot(field_name):
     
     return p
 
+
 # ## Main Code for Interactive Map
 # Input GeoJSON source that contains features for plotting for: current day and initial criteria for `Confirmed`
 geosource = GeoJSONDataSource(geojson = json_data(most_recent))
-input_field = 'Confirmed'
+input_field = 'TotalCases'
 
 # Define a sequential multi-hue color palette
 palette = brewer['YlGnBu'][8]
@@ -150,22 +145,22 @@ palette = palette[::-1]
 
 # Add hover tool
 hover = HoverTool(tooltips = [ ('County','@County'),
-                               ('# Cases', '@Confirmed'),
-                               ('# Deaths', '@Deaths'),     
-                               ('% Fatality', '@Fatality_Rate'),     
-                               ('% Daily Change', '@pConfirmed_Change'),     
+                               ('# Cases', '@TotalCases'),
+                               ('# Deaths', '@TotalDeaths'),     
+                               ('# Daily Case Increase', '@nConfirmed_Change'),     
+                               ('# Daily Daily Increase', '@nConfirmed_Change'),     
                             ])
 
 # Call the plotting function
 p = make_plot(input_field)
 
 # Make a slider object: slider 
-slider = Slider(title='Day', start=19, end=most_recent, step=1, value=most_recent)
+slider = Slider(title='Day', start=1, end=most_recent, step=1, value=most_recent)
 slider.on_change('value', update_plot)
 
 # Make a selection object: select
-select = Select(title='Select Criteria:', value='Number of Confirmed Cases', options=['Number of Confirmed Coronavirus Cases', 'Number of Confirmed Coronavirus Deaths',
-                                                                               'Coronavirus Fatality Rate (Deaths/Confirmed)', 'Percent Daily Change in Coronavirus Cases'])
+select = Select(title='Select Criteria:', value='Number of Confirmed Coronavirus Cases', options=['Number of Confirmed Coronavirus Cases', 'Number of Confirmed Coronavirus Deaths',
+                                                                               'Daily Increase in Cases', 'Daily Increase in Deaths'])
 select.on_change('value', update_plot)
  
 # Make a column layout of widgetbox(slider) and plot, and add it to the current document
@@ -174,6 +169,43 @@ layout = column(p, widgetbox(select), widgetbox(slider))
 # Display the current document
 curdoc().add_root(layout)
 
-# Use the following code to test in a notebook, comment out for transfer to live site as interactive features will not show in notebook
+# # Use the following code to test in a notebook, comment out for transfer to live site as interactive features will not show in notebook
 # output_notebook()
+# show(p)
+
+# # Static Map
+# ## Static Chloropleth Map for Today
+# Filter out the most recent values:
+# counties = counties[counties["Day"] == most_recent]
+
+# # merge geopandas dataframe with counties data
+# merged = gdf.merge(counties, on="fips")
+
+# merged['Date'] = str(merged['Date'])
+# json_data = merged.to_json()
+
+# #Input GeoJSON source that contains features for plotting.
+# geosource = GeoJSONDataSource(geojson = json_data)
+# #Define a sequential multi-hue color palette.
+# palette = brewer['YlGnBu'][8]
+# #Reverse color order so that dark blue is highest obesity.
+# palette = palette[::-1]
+# #Instantiate LinearColorMapper that linearly maps numbers in a range, into a sequence of colors.
+# color_mapper = LinearColorMapper(palette = palette, low = 1, high = 100, low_color = '#F7F6F6')
+# #Create color bar. 
+# color_bar = ColorBar(color_mapper=color_mapper, label_standoff=8,width = 650, height = 20,
+# border_line_color=None,location = (0,0), orientation = 'horizontal')
+# # , major_label_overrides = steps
+# #Create figure object.
+# p = figure(title = 'Number of Confirmed Coronavirus Cases in Georgia', plot_height = 900 , plot_width = 650, toolbar_location = None)
+# p.xgrid.grid_line_color = None
+# p.ygrid.grid_line_color = None
+# #Add patch renderer to figure. 
+# p.patches('xs','ys', source = geosource,fill_color = {'field' :'TotalCases', 'transform' : color_mapper},
+#           line_color = 'black', line_width = 0.25, fill_alpha = 1)
+# #Specify figure layout.
+# p.add_layout(color_bar, 'below')
+# #Display figure inline in Jupyter Notebook.
+# output_notebook()
+# #Display figure.
 # show(p)
